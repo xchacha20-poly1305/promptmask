@@ -77,6 +77,42 @@ Local LLM Model ID can be specified in your config file (more detail on [configu
 model = "qwen2.5:7b"
 ```
 
+#### Using the Transformers Backend
+
+PromptMask can also use a local token-classification model instead of an
+OpenAI-compatible chat model. The recommended model is
+[openai/privacy-filter](https://github.com/openai/privacy-filter), which is
+designed specifically for PII detection.
+
+Install the optional dependencies:
+
+```bash
+pip install "promptmask[transformers]"
+```
+
+Then select the backend in `promptmask.config.user.toml`:
+
+```toml
+[llm_api]
+backend = "transformers"
+model = "openai/privacy-filter"
+device = "auto" # "auto", "cpu", "cuda", or "xpu"
+```
+
+This backend runs locally through Hugging Face Transformers. It does not call
+the `llm_api.base` OpenAI-compatible endpoint, and it does not use the
+prompt-based `sensitive.include` / `sensitive.exclude` rules. The model's
+supported PII categories determine what can be detected.
+
+For Intel GPU/XPU inference, install an XPU-enabled PyTorch build first. The
+regular `promptmask[transformers]` extra only declares the PyTorch dependency;
+it does not choose a hardware-specific PyTorch wheel for you.
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/xpu
+pip install "promptmask[transformers]"
+```
+
 ### For General Users: local OpenAI-compatible API Gateway
 
 Point any existing tool/app at the local gateway. It's the seamless way to add `PromptMask` layer without coding in Python.

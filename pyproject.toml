@@ -44,6 +44,11 @@ web = [
     "fastapi>=0.100",
     "uvicorn[standard]>=0.20",
 ]
+transformers = [
+    "transformers>=4.30",
+    "torch>=2.0",
+    "accelerate>=0.20",
+]
 dev = [
     "ruff",
     "tqdm",

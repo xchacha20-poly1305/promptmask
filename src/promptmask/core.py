@@ -37,21 +37,36 @@ class PromptMask:
         """
         logger.info("Initializing or reloading PromptMask configuration...")
         self.config = load_config(self._init_config_override, self._init_config_file)
-        
-        self.client = OpenAI(base_url=self.config["llm_api"]["base"], api_key=self.config["llm_api"]["key"], timeout=self.config["llm_api"]["timeout"])
-        self.async_client = AsyncOpenAI(base_url=self.config["llm_api"]["base"], api_key=self.config["llm_api"]["key"], timeout=self.config["llm_api"]["timeout"])
 
-        # Auto-detect model if not specified
-        if not self.config["llm_api"].get("model"):
-            try:
-                models = self.client.models.list()
-                if not models.data:
-                    raise ValueError("No models found at the local LLM API endpoint.")
-                self.config["llm_api"]["model"] = models.data[0].id
-                logger.info(f"Auto-selected local model: {self.config['llm_api']['model']}")
-            except Exception as e:
-                logger.error(f"Failed to auto-detect a model from {self.config['llm_api']['base']}. Please specify a model in your config. Error: {e}")
-                raise
+        self.backend_type = self.config["llm_api"].get("backend", "openai-compatible")
+
+        if self.backend_type == "transformers":
+            from .backends.transformers_backend import TransformersBackend
+            model_name = self.config["llm_api"].get("model", "openai/privacy-filter")
+            device = self.config["llm_api"].get("device", "auto")
+            self.transformers_backend = TransformersBackend(
+                model_name=model_name,
+                device=device,
+                mask_wrapper=self.config["mask_wrapper"]
+            )
+            self.client = None
+            self.async_client = None
+            logger.info(f"Loaded transformers backend: {model_name}")
+        else:
+            self.client = OpenAI(base_url=self.config["llm_api"]["base"], api_key=self.config["llm_api"]["key"], timeout=self.config["llm_api"]["timeout"])
+            self.async_client = AsyncOpenAI(base_url=self.config["llm_api"]["base"], api_key=self.config["llm_api"]["key"], timeout=self.config["llm_api"]["timeout"])
+
+            # Auto-detect model if not specified
+            if not self.config["llm_api"].get("model"):
+                try:
+                    models = self.client.models.list()
+                    if not models.data:
+                        raise ValueError("No models found at the local LLM API endpoint.")
+                    self.config["llm_api"]["model"] = models.data[0].id
+                    logger.info(f"Auto-selected local model: {self.config['llm_api']['model']}")
+                except Exception as e:
+                    logger.error(f"Failed to auto-detect a model from {self.config['llm_api']['base']}. Please specify a model in your config. Error: {e}")
+                    raise
         logger.info("PromptMask configuration loaded successfully.")
 
     async def reload_config(self):
@@ -148,7 +163,10 @@ class PromptMask:
         """Masks a single string."""
         if not text:
             return "", {}
-            
+
+        if self.backend_type == "transformers":
+            return self.transformers_backend.mask_text(text)
+
         messages = self._build_mask_prompt(text)
         logger.debug(f"Message sending to local LLM: {messages}")
 
@@ -157,11 +175,11 @@ class PromptMask:
 
         mask_map = self._parse_mask_response(response_content)
         sorted_mask_items = sorted(mask_map.items(), key=lambda item: len(item[0]), reverse=True)
-        
+
         masked_text = text
         for original, mask in sorted_mask_items:
             masked_text = masked_text.replace(original, mask)
-        
+
         return masked_text, mask_map
 
     def mask_messages(self, messages: List[Dict[str, str]]) -> Tuple[List[Dict[str, str]], Dict[str, str]]:
@@ -254,9 +272,12 @@ class PromptMask:
         """Async version of mask_str."""
         if not text:
             return "", {}
-            
+
+        if self.backend_type == "transformers":
+            return await self.transformers_backend.async_mask_text(text)
+
         messages = self._build_mask_prompt(text)
-            
+
         response_content = await self._async_oai_chat_comp(messages)
 
         mask_map = self._parse_mask_response(response_content)
@@ -265,7 +286,7 @@ class PromptMask:
         masked_text = text
         for original, mask in sorted_mask_items:
             masked_text = masked_text.replace(original, mask)
-            
+
         return masked_text, mask_map
 
     async def async_mask_messages(self, messages: List[Dict[str, str]]) -> Tuple[List[Dict[str, str]], Dict[str, str]]:

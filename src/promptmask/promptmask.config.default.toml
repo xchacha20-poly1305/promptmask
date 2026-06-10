@@ -1,12 +1,14 @@
 # promptmask.config.default.toml
 
-# Configuration for the local LLM used for masking.
+# Configuration for the local masking backend.
 # Environment variables like LOCALAI_API_BASE and LOCALAI_API_KEY are checked first.
 [llm_api]
+backend = "openai-compatible" # "openai-compatible" or "transformers"
 base = "http://localhost:11434/v1"
 model = "" # If empty, will auto-detect first available model from /v1/models
 key = ""
 timeout = 15.0
+device = "auto" # Transformers backend only: "auto", "cpu", "cuda", or "xpu"
 
 # Defines what data is considered sensitive.
 [sensitive]
